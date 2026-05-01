@@ -1,165 +1,168 @@
 # Indian Markets Voice Agent
 
-A free, browser-based voice agent that answers questions about Indian equity markets — live quotes, market movers, and a mocked portfolio. Built on LiveKit Agents with Google Gemini Live (single multimodal model for speech-in and speech-out) and yfinance for market data.
+A free, browser-based voice agent that answers questions about Indian equity markets — live quotes, market movers, and a mocked portfolio. Built on LiveKit Agents with Google Gemini Live and yfinance.
 
-> ⚠️ **Demo only.** This is for information / prototyping. It is not investment advice. Quotes are delayed by ~15 minutes. Do not deploy to real users without SEBI Investment Adviser / Research Analyst registration.
-
-## What it does
-
-You click a link, allow microphone access, and have a natural conversation:
-
-- *"How is Reliance trading today?"*
-- *"What's Nifty at?"*
-- *"How are markets doing?"*
-- *"Show me my portfolio."*
-- *"How is my Infosys position?"*
-- *"How's the IT sector today?"*
-
-The agent politely refuses trade recommendations and order placement.
-
-## Stack
-
-| Layer | Choice | Cost |
-|---|---|---|
-| Voice orchestration + browser link | LiveKit Cloud (free tier) | Free, ~50 min/month |
-| Speech-in + LLM + speech-out | Google Gemini 2.0 Flash Live | Free tier on AI Studio |
-| Market data | yfinance (NSE tickers, ~15min delayed) | Free, no key |
-| Portfolio | Hardcoded mock + live prices | Free |
-
-Everything runs on your laptop. No phone number, no Twilio, no credit card.
+> ⚠️ **Demo only.** Not investment advice. Quotes delayed ~15 minutes. Don't deploy to real users without SEBI registration.
 
 ## Project layout
 
+The codebase is organized in **layers**. Each layer only depends on the layers below it. This makes it easy to swap pieces (e.g. yfinance → Zerodha Kite) without rewrites.
+
 ```
 markets-voice-agent/
-├── agent.py              # The agent: instructions + tool definitions + entrypoint
-├── tools/
-│   ├── market_data.py    # Symbol resolution + yfinance quote/overview/sector
-│   └── portfolio.py      # Mocked holdings, enriched with live prices
-├── smoke_test.py         # Test the data tools without spinning up the agent
+│
+├── agent.py                      # ENTRYPOINT — wires session and agent. Stays boring.
+├── config.py                     # Voice, model, temperature — all knobs in one place.
+├── prompts.py                    # System instructions and greeting — content, not code.
+│
+├── agents/
+│   └── markets_agent.py          # MarketsAgent class. Tool methods are thin wrappers.
+│
+├── tools/                        # Orchestration: combine data + provider.
+│   ├── market_data.py            # get_quote, get_market_overview, get_sector_movers
+│   └── portfolio.py              # get_portfolio, get_position (mocked + live prices)
+│
+├── providers/                    # External services. ONE file per provider.
+│   └── yfinance_provider.py      # The only file that imports yfinance.
+│
+├── data/                         # Pure data. No logic, no imports from project.
+│   ├── symbols.py                # STOCK_MAP, INDEX_MAP, SECTOR_CONSTITUENTS, resolve_symbol
+│   └── holdings.py               # MOCK_HOLDINGS — the demo portfolio.
+│
+├── smoke_test.py                 # Verify data layer works without the agent.
 ├── requirements.txt
-├── .env.example          # Copy to .env, fill in keys
-└── README.md
+└── .env.example                  # Copy to .env, fill in 4 values.
 ```
 
-## Setup (5 minutes)
+### The dependency direction (one-way)
 
-### 1. Get the two API keys
+```
+agent.py
+   │
+   ▼
+agents/markets_agent.py
+   │
+   ▼
+tools/        (market_data, portfolio)
+   │
+   ▼
+providers/    (yfinance_provider)
+   │
+   ▼
+data/         (symbols, holdings)  ← imports nothing from the project
+```
 
-**LiveKit Cloud** — sign up at https://cloud.livekit.io. Create a project. Open the project, go to **Settings → Keys**, and copy the WebSocket URL, API Key, and API Secret.
+A higher layer can import from any lower layer. A lower layer **never** imports up. If you feel the urge to do so, there's probably a piece of shared logic that needs to move down.
 
-**Google Gemini** — go to https://aistudio.google.com/app/apikey, click "Create API key", copy it.
+## Where to make common changes
 
-### 2. Install
+| You want to... | Edit this file |
+|---|---|
+| Try a different voice | `config.py` |
+| Tweak the agent's personality / refusal rules | `prompts.py` |
+| Add a new stock the user can ask about | `data/symbols.py` (`STOCK_MAP`) |
+| Change the demo portfolio | `data/holdings.py` (`MOCK_HOLDINGS`) |
+| Swap yfinance for Zerodha Kite | Write `providers/kite_provider.py`, change one import in `tools/` |
+| Add a new tool (e.g. earnings dates) | Add a function in `tools/`, add a `@function_tool` method in `agents/markets_agent.py` |
+| Change the greeting | `prompts.py` (`GREETING_INSTRUCTIONS`) |
+
+## Setup
 
 Requires Python 3.10+.
 
 ```bash
-git clone <this-folder>  # or just cd into it
-cd markets-voice-agent
-
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python agent.py download-files     # one-time, downloads VAD model
+cp .env.example .env               # then fill in your 4 keys
 ```
 
-Download the Silero VAD model (one-time, ~30 MB):
+Get the keys:
+- **LiveKit Cloud** — https://cloud.livekit.io → create project → Settings → Keys
+- **Google Gemini** — https://aistudio.google.com/app/apikey
 
-```bash
-python agent.py download-files
-```
+## Run
 
-### 3. Configure
-
-```bash
-cp .env.example .env
-```
-
-Then open `.env` and paste in your four values: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `GOOGLE_API_KEY`.
-
-### 4. Verify market data works
-
-Before fighting with audio, make sure the data layer is healthy:
-
+**Verify the data layer first:**
 ```bash
 python smoke_test.py
 ```
+You should see real prices for Reliance, Nifty, etc. If you see error dicts, that's a network or yfinance issue — easier to debug here than mid-call.
 
-You should see quotes for Reliance, Nifty levels, top movers, and a portfolio with realistic numbers. If yfinance fails, you'll see it here — that usually means a network issue or a temporarily-rate-limited Yahoo endpoint.
-
-### 5. Talk to it
-
-The simplest way — your laptop's mic and speakers, no browser:
-
+**Talk to it via terminal:**
 ```bash
 python agent.py console
 ```
 
-Or run it as a worker connected to LiveKit Cloud (recommended, lets you share a link):
-
+**Talk to it in a browser** (recommended — share-able link):
 ```bash
 python agent.py dev
 ```
-
-Then open the **LiveKit Agents Playground** at https://agents-playground.livekit.io, connect using your project, and start the session. You'll be talking to the agent in your browser.
+Then open https://agents-playground.livekit.io and connect your project.
 
 ## Try saying
 
-Things that work:
-
 - "How's Reliance today?"
-- "What's Nifty at right now?"
+- "What's Nifty at?"
 - "Give me a market overview."
 - "How are banks doing?"
 - "What's in my portfolio?"
-- "How is my HDFC Bank position?"
-- "Should I buy TCS?" → it will refuse politely.
+- "How's my HDFC Bank position?"
+- "Should I buy TCS?" → it refuses politely.
 
-Things that won't work yet (good places to extend):
+## Adding a new tool — full walkthrough
 
-- "Place an order for 10 shares of TCS." (intentionally refused)
-- News / earnings dates (no news API wired up).
-- Charts / technicals (out of scope for a voice demo).
+Suppose you want to add a `get_52_week_range` tool.
 
-## Customizing
-
-**Add more stocks.** Open `tools/market_data.py`, add to `STOCK_MAP`:
-
+**1. Add the data function** (in `tools/market_data.py`):
 ```python
-"paytm": "PAYTM.NS",
-"zomato": "ZOMATO.NS",
+def get_52_week_range_data(symbol: str) -> dict:
+    ticker = resolve_symbol(symbol)
+    if not ticker:
+        return {"error": f"I don't recognise {symbol!r}."}
+    # ... use fetch_quote or extend the provider
+    return {"name": symbol, "high": ..., "low": ...}
 ```
 
-**Change the mocked portfolio.** Edit `MOCK_HOLDINGS` in `tools/portfolio.py`.
+**2. Expose it as a tool method** (in `agents/markets_agent.py`):
+```python
+from tools.market_data import get_52_week_range_data  # add to imports
 
-**Different voice.** In `agent.py`, swap the `voice` parameter — Gemini Live offers `Aoede`, `Puck`, `Charon`, `Kore`, `Fenrir`. Each sounds noticeably different.
+@function_tool
+async def get_52_week_range(self, symbol: str) -> dict:
+    """Get the 52-week high and low for a stock.
 
-**Different personality.** Edit `SYSTEM_INSTRUCTIONS` in `agent.py`. Keep the refusal rules — they're what keep the demo defensible.
+    Args:
+        symbol: The company name as the user said it.
+    """
+    return get_52_week_range_data(symbol)
+```
 
-**Real-time (not delayed) data.** Swap yfinance for Zerodha Kite Connect (₹2,000/month, requires a Zerodha account) or Upstox API (free with an Upstox account). The function signatures in `tools/market_data.py` won't need to change — only the internals of `_fetch_quote`.
+That's it. No changes to `agent.py`, `config.py`, or `prompts.py` needed. (You may want to mention the new capability in the system prompt, but it's optional — the docstring is what the LLM uses to decide when to call the tool.)
 
-**Phone calls.** When you're ready, LiveKit's SIP integration plus a Twilio number lets you point a phone number at this same agent, no code changes.
+## Swapping providers — full walkthrough
 
-## Troubleshooting
+Suppose you want real-time data from Zerodha Kite instead of delayed yfinance.
 
-**"No module named livekit.plugins.google"** — `pip install -r requirements.txt` again, or install `livekit-agents[google]` directly.
+**1. Write a new provider** (`providers/kite_provider.py`):
+```python
+from kiteconnect import KiteConnect
+# ... auth setup ...
 
-**yfinance returns `None` for everything** — Yahoo occasionally rate-limits. Wait a minute and retry. Also check that you can reach `query1.finance.yahoo.com` from your network.
+def fetch_quote(ticker: str) -> Quote | None:
+    # call Kite, return the same Quote TypedDict shape
+    ...
+```
 
-**The agent doesn't speak first** — your `GOOGLE_API_KEY` may be missing or invalid. Check the terminal logs from `python agent.py dev`.
+**2. Change one import** in `tools/market_data.py` and `tools/portfolio.py`:
+```python
+# from providers.yfinance_provider import fetch_quote
+from providers.kite_provider import fetch_quote
+```
 
-**"Worker registered" but the playground can't find it** — make sure the `LIVEKIT_URL` in your `.env` matches the project you're connecting the playground to.
-
-**Agent talks over me / cuts me off** — Gemini Live handles turn-taking automatically. If it's misbehaving, lower the model's `temperature` or try a different voice.
-
-## What this demo intentionally avoids
-
-- Storing real PII or KYC data. Don't put real account numbers in `MOCK_HOLDINGS`.
-- Saying anything that sounds like investment advice. The system prompt enforces this.
-- Real-time quotes. The 15-minute delay is acknowledged out loud when relevant.
-- Order placement. Removing this would put you in regulated territory immediately.
+Done. The rest of the codebase doesn't notice. *This* is what modular structure buys you.
 
 ## License
 
-MIT. Use freely. Don't use it to give people financial advice.
+MIT. Don't use it to give people financial advice.
