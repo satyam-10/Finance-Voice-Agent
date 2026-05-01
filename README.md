@@ -31,7 +31,6 @@ markets-voice-agent/
 │
 ├── smoke_test.py                 # Verify data layer works without the agent.
 ├── requirements.txt
-└── .env.example                  # Copy to .env, fill in 4 values.
 ```
 
 ### The dependency direction (one-way)
