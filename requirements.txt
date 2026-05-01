@@ -1,0 +1,11 @@
+# Core agent framework
+livekit-agents[google,silero]~=1.5
+
+# Voice activity detection (used by the realtime model for turn-taking)
+livekit-plugins-silero~=1.5
+
+# Market data (free, no API key)
+yfinance>=0.2.50
+
+# Env loading
+python-dotenv>=1.0.1
