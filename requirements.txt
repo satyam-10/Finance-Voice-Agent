@@ -11,4 +11,4 @@ yfinance>=0.2.50
 python-dotenv>=1.0.1
 
 flask>=3.0
-livekit-api>=0.7
+livekit-api>=0.7flask-cors>=4.0

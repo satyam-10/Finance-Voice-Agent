@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire project — this includes:
-#   - agent.py, config.py, prompts.py, smoke_test.py
+#   - main.py, config.py, prompts.py, smoke_test.py
 #   - agents/, tools/, providers/, data/  (your existing structure)
 #   - server.py            (the token server)
 #   - static/index.html    (the frontend)
