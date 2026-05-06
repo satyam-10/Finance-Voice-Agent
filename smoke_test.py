@@ -1,19 +1,18 @@
 """
-Quick smoke test for the data tools.
+Smoke test — verifies the data layer works without spinning up the agent.
 
-Run this BEFORE starting the agent to confirm that yfinance is working
-and your symbol mappings produce sane numbers:
-
+Run BEFORE starting the agent:
     python smoke_test.py
 
-If you see prices and a portfolio table, you're good to go.
+If you see prices and a portfolio table, you're good. If yfinance fails,
+you'll see clean error dicts here rather than the agent crashing mid-call.
 """
 
 import json
 
 from tools.market_data import (
-    get_quote_data,
     get_market_overview_data,
+    get_quote_data,
     get_sector_movers_data,
 )
 from tools.portfolio import get_portfolio_data, get_position_data
