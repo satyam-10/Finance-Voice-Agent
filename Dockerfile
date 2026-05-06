@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Pre-download LiveKit's VAD model so first request is fast
-RUN python agent.py download-files
+RUN python main.py download-files
 
 # Supervisor manages both processes in one container
 COPY supervisord.conf /etc/supervisor/conf.d/markets.conf
