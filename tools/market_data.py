@@ -18,7 +18,7 @@ from data.symbols import (
     SECTOR_CONSTITUENTS,
     resolve_symbol,
 )
-from providers.yfinance_provider import fetch_quote
+from providers.yfinance_provider import fetch_quote, fetch_quotes
 
 
 def get_quote_data(symbol: str) -> dict[str, Any]:
@@ -36,20 +36,12 @@ def get_quote_data(symbol: str) -> dict[str, Any]:
 
 def get_market_overview_data() -> dict[str, Any]:
     """Return Nifty/Sensex/Bank Nifty + top movers across sector baskets."""
-    indices: dict[str, Any] = {}
-    for label, ticker in [
-        ("Nifty 50", "^NSEI"),
-        ("Sensex", "^BSESN"),
-        ("Bank Nifty", "^NSEBANK"),
-    ]:
-        q = fetch_quote(ticker)
-        if q:
-            indices[label] = {
-                "last": q["last_price"],
-                "change": q["change"],
-                "change_pct": q["change_pct"],
-            }
-
+    index_map = {
+        "^NSEI": "Nifty 50",
+        "^BSESN": "Sensex",
+        "^NSEBANK": "Bank Nifty",
+    }
+    
     # Use the union of all sector baskets as a stand-in "watchlist" to
     # compute movers. Cheap, fast, good enough for a demo.
     basket = list({
@@ -57,9 +49,23 @@ def get_market_overview_data() -> dict[str, Any]:
         for sector_list in SECTOR_CONSTITUENTS.values()
         for s in sector_list
     })
+    
+    all_tickers = list(index_map.keys()) + basket
+    all_quotes = fetch_quotes(all_tickers)
+
+    indices: dict[str, Any] = {}
+    for ticker, label in index_map.items():
+        q = all_quotes.get(ticker)
+        if q:
+            indices[label] = {
+                "last": q["last_price"],
+                "change": q["change"],
+                "change_pct": q["change_pct"],
+            }
+
     movers: list[dict[str, Any]] = []
     for ticker in basket:
-        q = fetch_quote(ticker)
+        q = all_quotes.get(ticker)
         if q:
             movers.append({
                 "ticker": ticker.replace(".NS", ""),
@@ -88,9 +94,12 @@ def get_sector_movers_data(sector: str) -> dict[str, Any]:
             )
         }
 
+    tickers = SECTOR_CONSTITUENTS[key]
+    all_quotes = fetch_quotes(tickers)
+    
     rows: list[dict[str, Any]] = []
-    for ticker in SECTOR_CONSTITUENTS[key]:
-        q = fetch_quote(ticker)
+    for ticker in tickers:
+        q = all_quotes.get(ticker)
         if q:
             rows.append({
                 "ticker": ticker.replace(".NS", ""),
